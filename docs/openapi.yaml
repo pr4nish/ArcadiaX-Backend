@@ -1,0 +1,825 @@
+openapi: 3.0.3
+info:
+  title: ArcadiaX Backend API
+  version: 1.0.0
+  description: >
+    Complete REST API for the ArcadiaX Single-Server Discord Management Bot & React Dashboard.
+    Provides administrative control over Antinuke, Antibetray, Automated Backups, Tickets,
+    Welcome/Goodbye, Autorole, Embeds, Messaging, and Music playback.
+servers:
+  - url: http://localhost:5000
+    description: Local Development Server
+  - url: https://api.yourdomain.com
+    description: Production Server
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: arcadiax.sid
+      description: Session cookie generated via Discord OAuth2 flow.
+    devHeaderAuth:
+      type: apiKey
+      in: header
+      name: x-dev-admin
+      description: Development-only bypass header ('true') for local React dashboard testing.
+
+  schemas:
+    StandardSuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+        message:
+          type: string
+          example: "Operation completed successfully."
+
+    StandardErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: "Error description message."
+        code:
+          type: string
+          example: "BAD_REQUEST"
+        details:
+          nullable: true
+
+    UserSession:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "123456789012345678"
+        username:
+          type: string
+          example: "AdminUser"
+        discriminator:
+          type: string
+          example: "0"
+        avatarUrl:
+          type: string
+          example: "https://cdn.discordapp.com/avatars/123/abc.png"
+        isOwner:
+          type: boolean
+          example: true
+        isAdmin:
+          type: boolean
+          example: true
+
+    AntinukeConfig:
+      type: object
+      properties:
+        guild_id:
+          type: string
+        enabled:
+          type: integer
+          example: 1
+        mass_channel_delete_threshold:
+          type: integer
+          example: 3
+        mass_channel_delete_window:
+          type: integer
+          example: 10
+        mass_channel_create_threshold:
+          type: integer
+          example: 3
+        mass_channel_create_window:
+          type: integer
+          example: 10
+        mass_role_delete_threshold:
+          type: integer
+          example: 3
+        mass_role_delete_window:
+          type: integer
+          example: 10
+        mass_role_create_threshold:
+          type: integer
+          example: 3
+        mass_role_create_window:
+          type: integer
+          example: 10
+        mass_ban_threshold:
+          type: integer
+          example: 3
+        mass_ban_window:
+          type: integer
+          example: 10
+        mass_kick_threshold:
+          type: integer
+          example: 3
+        mass_kick_window:
+          type: integer
+          example: 10
+        webhook_creation_protection:
+          type: integer
+          example: 1
+        dangerous_perm_protection:
+          type: integer
+          example: 1
+        response_action:
+          type: string
+          enum: [strip_roles, quarantine_role, alert_only]
+          example: "strip_roles"
+        quarantine_role_id:
+          type: string
+          nullable: true
+        alert_channel_id:
+          type: string
+          nullable: true
+        emergency_lockdown_enabled:
+          type: integer
+          example: 0
+
+    AntibetrayConfig:
+      type: object
+      properties:
+        guild_id:
+          type: string
+        enabled:
+          type: integer
+          example: 1
+        admin_perm_monitoring:
+          type: integer
+          example: 1
+        role_hierarchy_monitoring:
+          type: integer
+          example: 1
+        channel_perm_monitoring:
+          type: integer
+          example: 1
+        webhook_monitoring:
+          type: integer
+          example: 1
+        auto_rollback:
+          type: integer
+          example: 1
+        alert_channel_id:
+          type: string
+          nullable: true
+
+    TicketOption:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "opt_optimization"
+        label:
+          type: string
+          example: "Optimization"
+        description:
+          type: string
+          example: "System & latency tuning assistance"
+        emoji:
+          type: string
+          example: "⚡"
+
+    TicketConfig:
+      type: object
+      properties:
+        guild_id:
+          type: string
+        enabled:
+          type: integer
+          example: 1
+        category_id:
+          type: string
+          nullable: true
+        log_channel_id:
+          type: string
+          nullable: true
+        support_role_ids:
+          type: array
+          items:
+            type: string
+        panel_channel_id:
+          type: string
+          nullable: true
+        panel_title:
+          type: string
+          example: "ArcadiaX Support Portal"
+        panel_description:
+          type: string
+          example: "Select a category below to create a support ticket."
+        panel_color:
+          type: string
+          example: "#5865F2"
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/TicketOption'
+
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      responses:
+        '200':
+          description: Service healthy
+
+  /api/auth/discord:
+    get:
+      summary: Start Discord OAuth2 authentication flow
+      responses:
+        '302':
+          description: Redirects browser to Discord authorization URL
+
+  /api/auth/callback:
+    get:
+      summary: Discord OAuth2 callback handler
+      parameters:
+        - in: query
+          name: code
+          required: true
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Sets cookie and redirects to React Dashboard
+
+  /api/auth/me:
+    get:
+      summary: Get currently authenticated user profile
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      responses:
+        '200':
+          description: User session data
+        '401':
+          $ref: '#/components/schemas/StandardErrorResponse'
+
+  /api/auth/logout:
+    post:
+      summary: Terminate session and clear cookie
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Logged out successfully
+
+  /api/dashboard/overview:
+    get:
+      summary: Overall server metrics, counts, and stats
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      responses:
+        '200':
+          description: Overview data
+
+  /api/dashboard/status:
+    get:
+      summary: System status, bot gateway ping, memory usage, uptime
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      responses:
+        '200':
+          description: Status data
+
+  /api/antinuke:
+    get:
+      summary: Get antinuke configuration & trusted users
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      responses:
+        '200':
+          description: Antinuke settings
+    put:
+      summary: Update antinuke configuration
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AntinukeConfig'
+      responses:
+        '200':
+          description: Updated antinuke configuration
+
+  /api/antinuke/logs:
+    get:
+      summary: Get paginated antinuke security logs
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Paginated logs
+
+  /api/antinuke/lockdown:
+    post:
+      summary: Engage or release emergency server lockdown
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enable:
+                  type: boolean
+                  example: true
+      responses:
+        '200':
+          description: Lockdown status updated
+
+  /api/antibetray:
+    get:
+      summary: Get antibetray configuration
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      responses:
+        '200':
+          description: Antibetray settings
+    put:
+      summary: Update antibetray configuration
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AntibetrayConfig'
+      responses:
+        '200':
+          description: Updated antibetray settings
+
+  /api/antibetray/logs:
+    get:
+      summary: Get paginated antibetray security logs
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      responses:
+        '200':
+          description: Antibetray logs
+
+  /api/backups:
+    get:
+      summary: List all server backups
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      responses:
+        '200':
+          description: List of backups
+    post:
+      summary: Trigger manual snapshot backup
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "Pre-Maintenance Snapshot"
+      responses:
+        '201':
+          description: Backup snapshot created
+
+  /api/backups/{id}:
+    get:
+      summary: Get backup breakdown and details
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Backup preview data
+    delete:
+      summary: Delete backup record
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Backup deleted
+
+  /api/backups/{id}/restore:
+    post:
+      summary: Restore server snapshot
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirmation]
+              properties:
+                roles:
+                  type: boolean
+                  default: true
+                channels:
+                  type: boolean
+                  default: true
+                settings:
+                  type: boolean
+                  default: false
+                confirmation:
+                  type: boolean
+                  example: true
+      responses:
+        '200':
+          description: Restore executed
+
+  /api/welcome:
+    get:
+      summary: Get welcome & goodbye configuration
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      responses:
+        '200':
+          description: Welcome config
+    put:
+      summary: Update welcome & goodbye configuration
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      responses:
+        '200':
+          description: Updated welcome config
+
+  /api/welcome/preview:
+    post:
+      summary: Generate rendered preview of welcome/goodbye message
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Rendered preview payload
+
+  /api/autorole:
+    get:
+      summary: Get human & bot autorole configuration
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      responses:
+        '200':
+          description: Autorole config
+    put:
+      summary: Update autorole configuration
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      responses:
+        '200':
+          description: Updated autorole config
+
+  /api/embeds/preview:
+    post:
+      summary: Preview Discord EmbedBuilder JSON
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Formatted embed JSON
+
+  /api/embeds/send:
+    post:
+      summary: Dispatch custom embed to channel
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [channelId, embed]
+              properties:
+                channelId:
+                  type: string
+                content:
+                  type: string
+                embed:
+                  type: object
+      responses:
+        '200':
+          description: Message sent
+
+  /api/messages/send:
+    post:
+      summary: Dispatch text/embed message with sanitized allowed mentions
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [channelId]
+              properties:
+                channelId:
+                  type: string
+                content:
+                  type: string
+                embed:
+                  type: object
+                allowEveryone:
+                  type: boolean
+                allowRoles:
+                  type: boolean
+                allowUsers:
+                  type: boolean
+      responses:
+        '200':
+          description: Sent successfully
+
+  /api/messages/history:
+    get:
+      summary: Get sent message history
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      responses:
+        '200':
+          description: Message logs
+
+  /api/tickets:
+    get:
+      summary: List tickets with status filter
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [open, claimed, closed]
+      responses:
+        '200':
+          description: Tickets list
+
+  /api/tickets/config:
+    get:
+      summary: Get ticket system configuration and categories
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      responses:
+        '200':
+          description: Ticket config
+    put:
+      summary: Update ticket system configuration
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      responses:
+        '200':
+          description: Updated ticket config
+
+  /api/tickets/panel:
+    post:
+      summary: Deploy ticket panel to channel
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                channelId:
+                  type: string
+      responses:
+        '200':
+          description: Panel deployed
+
+  /api/tickets/{id}:
+    get:
+      summary: Get ticket record, conversation history, and transcript
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Ticket details
+
+  /api/tickets/{id}/close:
+    post:
+      summary: Close ticket
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Ticket closed
+
+  /api/music/status:
+    get:
+      summary: Get audio playback and queue status
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      responses:
+        '200':
+          description: Music status
+
+  /api/music/control:
+    post:
+      summary: Control music playback
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [play, pause, resume, skip, stop, volume]
+                value:
+                  type: integer
+                query:
+                  type: string
+                channelId:
+                  type: string
+      responses:
+        '200':
+          description: Action executed
+
+  /api/logs:
+    get:
+      summary: Get audit activity logs
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      responses:
+        '200':
+          description: Activity logs
+
+  /api/logs/{type}:
+    get:
+      summary: Get logs by specific category
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      parameters:
+        - in: path
+          name: type
+          required: true
+          schema:
+            type: string
+            enum: [security, messages, activity]
+      responses:
+        '200':
+          description: Categorized logs
+
+  /api/settings:
+    get:
+      summary: Get server settings
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      responses:
+        '200':
+          description: Server settings
+    put:
+      summary: Update server settings
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      responses:
+        '200':
+          description: Updated settings
+
+  /api/guild/channels:
+    get:
+      summary: Get server channels categorized for dropdown select inputs
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      responses:
+        '200':
+          description: Channels list
+
+  /api/guild/roles:
+    get:
+      summary: Get server roles sorted by hierarchy for role select inputs
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      responses:
+        '200':
+          description: Roles list
+
+  /api/guild/members:
+    get:
+      summary: Search and list server members
+      security:
+        - cookieAuth: []
+        - devHeaderAuth: []
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Members list
